@@ -4,6 +4,8 @@ const moment = require("moment");
 const path = require("path");
 const fs = require("fs");
 const axios = require("axios");
+// or
+// import {NotionToMarkdown} from "notion-to-md";
 
 const notion = new Client({
   auth: process.env.NOTION_TOKEN,
@@ -16,13 +18,31 @@ function escapeCodeBlock(body) {
   });
 }
 
-function makeMarkdownTitle(body) {
-    return body.replaceAll("\n\n#", "\n\n##");
+function replaceTitleOutsideRawBlocks(body) {
+  const rawBlocks = [];
+  const placeholder = "%%RAW_BLOCK%%";
+  body = body.replace(/{% raw %}[\s\S]*?{% endraw %}/g, (match) => {
+    rawBlocks.push(match);
+    return placeholder;
+  });
+
+  const regex = /\n#[^\n]+\n/g;
+  body = body.replace(regex, function (match) {
+    return "\n" + match.replace("\n#", "\n##");
+  });
+
+  rawBlocks.forEach(block => {
+    body = body.replace(placeholder, block);
+  });
+
+  return body;
 }
 
+// passing notion client to the option
 const n2m = new NotionToMarkdown({ notionClient: notion });
 
 (async () => {
+  // ensure directory exists
   const root = "_posts";
   fs.mkdirSync(root, { recursive: true });
 
@@ -115,9 +135,8 @@ title: "${title}"${fmtags}${fmcats}
     if (md === "") {
       continue;
     }
-    console.log(md);
     md = escapeCodeBlock(md);
-    md = makeMarkdownTitle(md);
+    md = replaceTitleOutsideRawBlocks(md);
 
     const ftitle = `${date}-${title.replaceAll(" ", "-")}.md`;
 
@@ -152,6 +171,7 @@ title: "${title}"${fmtags}${fmcats}
       }
     );
 
+    //writing to file
     fs.writeFile(path.join(root, ftitle), fm + edited_md, (err) => {
       if (err) {
         console.log(err);
